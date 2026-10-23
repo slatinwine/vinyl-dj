@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Vinyl DJ · 浏览器里的黑胶搓碟唱机</title>
+<meta name="description" content="在浏览器里体验黑胶唱机：加载任意音频，按住唱片即可搓碟（正向/倒放），支持 33⅓/45 转速、音调推子、黑胶爆音，内置 Demo 节拍。纯前端，音频不出本机。">
+<meta name="theme-color" content="#141210">
+<meta property="og:title" content="Vinyl DJ · 浏览器里的黑胶搓碟唱机">
+<meta property="og:description" content="按住唱片就能搓碟的网页唱机：变速、倒放、33⅓/45 转速、音调推子、黑胶爆音，内置 Demo。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://slatinwine.github.io/vinyl-dj/screenshot.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23121212'/%3E%3Ccircle cx='32' cy='32' r='30' fill='none' stroke='%23262626' stroke-width='1'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%23e0a83f'/%3E%3Ccircle cx='32' cy='32' r='3' fill='%23141210'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#141210;
+    --panel:#1d1a16;
+    --accent:#e0a83f;
+    --accent-hi:#f2c56a;
+    --text:#e8e2d6;
+    --dim:#8d8578;
+    --ok:#9ec97f;
+    --err:#d97b6c;
+    --btn:#2b2620;
+    --btn-hi:#38322a;
+    --line:rgba(255,255,255,.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{height:100%}
+  body{
+    min-height:100%;
+    background:
+      radial-gradient(1100px 700px at 50% 18%, #241f19 0%, transparent 55%),
+      radial-gradient(900px 900px at 50% 110%, #0a0908 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:22px 14px 30px;
+    overflow-x:hidden;
+    user-select:none;-webkit-user-select:none;
+  }
+
+  /* ── 顶栏 ── */
+  .top{
+    width:min(640px,96vw);
+    display:flex;align-items:baseline;gap:14px;
+    margin-bottom:18px;
+  }
+  .logo{display:flex;align-items:center;gap:9px;font-size:15px;letter-spacing:3px;color:var(--text);font-weight:600}
+  .logo svg{display:block}
+  .logo b{color:var(--accent);font-weight:700}
+  .tagline{font-size:12px;color:var(--dim);letter-spacing:1px}
+  .gh{
+    margin-left:auto;font-size:12px;color:var(--dim);text-decoration:none;
+    border:1px solid var(--line);border-radius:8px;padding:4px 10px;letter-spacing:1px;
+    transition:color .15s,border-color .15s;
+  }
+  .gh:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* ── 唱机机身 ── */
+  .deck{
+    /* 宽度随视口自适应：桌面尽量一屏放下，小屏不横向溢出（92vw 兜底） */
+    width:min(640px, 92vw, max(432px, calc(100vh - 420px)));
+    background:linear-gradient(165deg,#2b261f 0%,#1d1a15 55%,#151210 100%);
+    border:1px solid var(--line);
+    border-radius:22px;
+    padding:18px 26px 24px;
+    box-shadow:
+      0 34px 70px rgba(0,0,0,.65),
+      0 4px 14px rgba(0,0,0,.4),
+      inset 0 1px 0 rgba(255,255,255,.07);
+    position:relative;
+    transition:box-shadow .2s;
+  }
+  body.dropping .deck{
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 40px rgba(224,168,63,.25),
+      0 34px 70px rgba(0,0,0,.65),
+      inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  .screw{
+    position:absolute;width:9px;height:9px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#5c554a,#241f19 70%);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.05);
+  }
+  .screw::after{content:"";position:absolute;left:1px;right:1px;top:50%;height:1px;background:rgba(0,0,0,.7);transform:rotate(38deg)}
+  .screw.tl{top:10px;left:10px}.screw.tr{top:10px;right:10px}
+  .screw.bl{bottom:10px;left:10px}.screw.br{bottom:10px;right:10px}
+
+  .deck-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:2px 6px 14px;
+  }
+  .brand{font-size:14px;font-weight:700;letter-spacing:2px;color:#c9c0af}
+  .brand small{
+    display:block;font-size:9px;font-weight:500;letter-spacing:2.5px;
+    color:var(--dim);margin-top:3px;
+  }
+  .led-btn{
+    font-family:inherit;cursor:pointer;color:var(--dim);
+    background:#241f1a;border:1px solid var(--line);border-radius:9px;
+    font-size:10px;letter-spacing:1.5px;padding:6px 10px 6px 12px;
+    display:inline-flex;align-items:center;gap:7px;
+    transition:color .15s,border-color .15s;
+  }
+  .led-btn .led{
+    width:7px;height:7px;border-radius:50%;
+    background:#3a332a;box-shadow:inset 0 0 2px rgba(0,0,0,.8);
+    transition:background .15s,box-shadow .15s;
+  }
+  .led-btn.on{color:var(--text)}
+  .led-btn.on .led{background:#8fd07a;box-shadow:0 0 8px rgba(143,208,122,.8)}
+  .led-btn:hover{border-color:rgba(255,255,255,.15)}
+
+  .deck-body{display:flex;gap:18px;align-items:stretch}
+
+  /* ── 转盘 ── */
+  .platter-wrap{flex:1;min-width:0}
+  .platter{
+    position:relative;width:100%;aspect-ratio:1;
+    border-radius:50%;
+    background:conic-gradient(from 40deg,#39332a,#262119,#39332a,#2b251d,#39332a);
+    box-shadow:
+      0 10px 30px rgba(0,0,0,.6),
+      inset 0 0 0 2px rgba(255,255,255,.05),
+      inset 0 6px 18px rgba(0,0,0,.5);
+    display:flex;align-items:center;justify-content:center;
+  }
+  /* 转盘边缘刻度点（静态） */
+  .platter::before{
+    content:"";position:absolute;inset:2.2%;border-radius:50%;
+    background:repeating-conic-gradient(from 0deg,
+      rgba(255,255,255,.10) 0deg .9deg, transparent .9deg 6deg);
+    -webkit-mask:radial-gradient(circle, transparent 47.4%, #000 47.8%, #000 50%, transparent 50.4%);
+            mask:radial-gradient(circle, transparent 47.4%, #000 47.8%, #000 50%, transparent 50.4%);
+    pointer-events:none;
+  }
+
+  /* 唱片 */
+  .disc{
+    position:absolute;inset:5.5%;
+    border-radius:50%;
+    background:
+      radial-gradient(circle, transparent 0 15.4%, rgba(255,255,255,.05) 15.4% 15.7%, transparent 15.7%),
+      radial-gradient(circle, transparent 0 27.2%, rgba(255,255,255,.04) 27.2% 27.5%, transparent 27.5%),
+      radial-gradient(circle, #0c0c0c 0 15%, #101010 15%),
+      repeating-radial-gradient(circle at 50% 50%,
+        #101010 0 1.4px, #191919 1.4px 2.6px, #0c0c0c 2.6px 4px);
+    box-shadow:0 0 0 1px #000, inset 0 0 44px rgba(0,0,0,.85);
+    cursor:grab;touch-action:none;
+  }
+  .disc.dragging{cursor:grabbing}
+  .disc.empty{cursor:default}
+  /* 固定高光（不随唱片旋转，模拟灯光） */
+  .sheen{
+    position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:2;
+    background:conic-gradient(from 205deg,
+      rgba(255,255,255,.11), transparent 16%, transparent 44%,
+      rgba(255,255,255,.05) 50%, transparent 58%, transparent 100%);
+  }
+  .spin{position:absolute;inset:0;border-radius:50%;will-change:transform}
+  /* 旋转标记：动点圈 + 一道油污痕，用于目视转速与搓碟反馈 */
+  .spin .dots{
+    position:absolute;inset:1.5%;border-radius:50%;
+    background:repeating-conic-gradient(from 0deg,
+      rgba(255,255,255,.13) 0deg 1.6deg, transparent 1.6deg 7.5deg);
+    -webkit-mask:radial-gradient(circle, transparent 44%, #000 44.4%, #000 47%, transparent 47.4%);
+            mask:radial-gradient(circle, transparent 44%, #000 44.4%, #000 47%, transparent 47.4%);
+  }
+  .spin .smudge{
+    position:absolute;inset:0;border-radius:50%;
+    background:conic-gradient(from 80deg,
+      transparent 0 32%, rgba(0,0,0,.20) 36% 44%, transparent 48% 100%);
+    filter:blur(2px);
+  }
+  .label{
+    position:absolute;left:50%;top:50%;
+    width:30.5%;height:30.5%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #f0c063, var(--accent) 58%, #a5762a);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.25), 0 0 0 3px rgba(0,0,0,.35);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4%;
+    transition:filter .4s;
+  }
+  .disc.empty .label{filter:saturate(.35) brightness(.75)}
+  .label .ring{position:absolute;inset:9%;border-radius:50%;border:1px solid rgba(0,0,0,.26)}
+  .label .ring.r2{inset:15.5%;border-color:rgba(0,0,0,.14)}
+  .label .name{
+    width:74%;text-align:center;font-size:11px;font-weight:700;color:#241a06;
+    letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .label .sub{font-size:7px;letter-spacing:1.6px;color:rgba(36,26,6,.72);font-weight:600}
+  .hole{
+    position:absolute;left:50%;top:50%;width:2.4%;height:2.4%;
+    transform:translate(-50%,-50%);
+    background:var(--bg);border-radius:50%;
+    box-shadow:0 0 0 2px rgba(0,0,0,.45);
+  }
+  .drop-tip{
+    position:absolute;left:50%;bottom:9%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:2px;color:rgba(232,226,214,.5);
+    animation:pulse 2.2s ease-in-out infinite;pointer-events:none;white-space:nowrap;
+  }
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:.8}}
+
+  /* ── 唱臂 ── */
+  .tonearm{
+    position:absolute;right:3.5%;top:-5.5%;
+    width:15%;height:64%;
+    transform-origin:86% 9%;
+    transform:rotate(6deg);
+    transition:transform .7s cubic-bezier(.3,.7,.3,1);
+    z-index:3;pointer-events:none;
+    filter:drop-shadow(0 5px 7px rgba(0,0,0,.55));
+  }
+  .tonearm .cw{
+    position:absolute;right:8%;top:-9%;width:34%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#5a544a,#1d1a15 75%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .tonearm .base{
+    position:absolute;right:0;top:0;width:36%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#d9d4c8,#7c766a 62%,#454138);
+    box-shadow:0 3px 6px rgba(0,0,0,.5);
+  }
+  .tonearm .base::after{
+    content:"";position:absolute;inset:32%;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,#9c9587,#3c372f);
+  }
+  .tonearm .arm{
+    position:absolute;right:15%;top:12%;width:11%;height:78%;
+    background:linear-gradient(90deg,#c2bcac,#8a8478 45%,#6b665b);
+    border-radius:8px;
+  }
+  .tonearm .head{
+    position:absolute;left:33%;bottom:0;width:54%;height:12.5%;
+    background:linear-gradient(#cdc7b8,#8a8478);
+    border-radius:3px;transform:rotate(-22deg);
+  }
+  .tonearm .head::after{
+    content:"";position:absolute;left:8%;top:34%;bottom:34%;width:16%;
+    background:var(--accent);border-radius:2px;opacity:.9;
+  }
+
+  /* ── 音调推子 ── */
+  .pitch{
+    width:64px;flex:none;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    padding:6px 0 4px;
+  }
+  .pitch-label{font-size:9px;letter-spacing:2.5px;color:var(--dim);font-weight:600}
+  .pitch .track-wrap{
+    position:relative;flex:1;width:36px;min-height:120px;
+  }
+  .pitch .track-wrap::before{ /* 中心刻度 */
+    content:"";position:absolute;left:5px;right:5px;top:50%;height:1px;
+    background:rgba(255,255,255,.22);
+  }
+  input[type=range].vertical{
+    -webkit-appearance:none;appearance:none;
+    writing-mode:vertical-lr;direction:rtl;
+    position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);
+    width:36px;background:transparent;cursor:pointer;
+  }
+  input[type=range].vertical::-webkit-slider-runnable-track{
+    width:4px;border-radius:2px;
+    background:linear-gradient(#171512,#171512) padding-box,#3a332a;
+    background-color:#3a332a;
+  }
+  input[type=range].vertical::-webkit-slider-thumb{
+    -webkit-appearance:none;width:26px;height:15px;border-radius:4px;
+    background:linear-gradient(#cfc8b8,#8a8478);
+    box-shadow:0 2px 5px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.35);
+    margin:-0.5px 0;
+  }
+  input[type=range].vertical::-moz-range-track{width:4px;border-radius:2px;background:#3a332a}
+  input[type=range].vertical::-moz-range-thumb{
+    width:26px;height:15px;border:none;border-radius:4px;
+    background:linear-gradient(#cfc8b8,#8a8478);
+    box-shadow:0 2px 5px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .pitch-val{
+    font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;
+    letter-spacing:.5px;min-height:13px;
+  }
+  .pitch-val:hover{color:var(--accent)}
+
+  /* ── 进度条 ── */
+  .seek{
+    margin-top:18px;height:22px;border-radius:8px;
+    display:flex;align-items:center;cursor:pointer;touch-action:none;
+    position:relative;
+  }
+  .seek::before{ /* 唱片纹理的凹槽 */
+    content:"";position:absolute;left:2px;right:2px;top:50%;height:6px;transform:translateY(-50%);
+    border-radius:3px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 5px),
+      #14110d;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.7);
+  }
+  .seek-fill{
+    position:absolute;left:2px;top:50%;height:6px;transform:translateY(-50%);
+    width:0%;border-radius:3px;overflow:hidden;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,.18) 0 1px, transparent 1px 5px),
+      linear-gradient(90deg,#a5762a,var(--accent));
+    box-shadow:0 0 10px rgba(224,168,63,.35);
+  }
+  .seek-dot{
+    position:absolute;right:-4px;top:50%;width:10px;height:10px;
+    transform:translateY(-50%);border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#f6d98f,var(--accent) 70%);
+    box-shadow:0 1px 4px rgba(0,0,0,.7);
+  }
+
+  /* ── 控制区 ── */
+  .controls{
+    display:flex;align-items:center;justify-content:center;
+    flex-wrap:wrap;gap:12px;margin-top:16px;
+  }
+  .btn,.file-label{
+    font-family:inherit;border:1px solid var(--line);cursor:pointer;color:var(--text);
+    background:var(--btn);border-radius:11px;padding:11px 17px;font-size:13.5px;
+    letter-spacing:.5px;
+    transition:background .15s,border-color .15s,transform .1s;
+  }
+  .btn:hover,.file-label:hover{background:var(--btn-hi);border-color:rgba(255,255,255,.12)}
+  .btn:active,.file-label:active{transform:scale(.97)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .file-label{display:inline-flex;align-items:center;gap:7px}
+  input[type=file]{display:none}
+  #playBtn{
+    width:62px;height:62px;border-radius:50%;padding:0;
+    border:1px solid rgba(255,255,255,.08);
+    background:radial-gradient(circle at 35% 30%,#3d362c,#221d17);
+    box-shadow:0 7px 16px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.09);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--accent);font-size:21px;
+  }
+  #playBtn.on{
+    color:#171310;
+    background:radial-gradient(circle at 35% 30%,#f2c56a,var(--accent) 72%);
+    box-shadow:0 0 26px rgba(224,168,63,.35), 0 7px 16px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .vol{display:flex;align-items:center;gap:9px;color:var(--dim);font-size:11px;letter-spacing:1.5px}
+  input[type=range].horizontal{
+    -webkit-appearance:none;appearance:none;
+    width:92px;height:4px;border-radius:2px;background:#3a332a;outline:none;cursor:pointer;
+  }
+  input[type=range].horizontal::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.6);
+  }
+  input[type=range].horizontal::-moz-range-thumb{
+    width:14px;height:14px;border:none;border-radius:50%;background:var(--accent);
+  }
+
+  .switches{
+    display:flex;align-items:center;justify-content:center;
+    flex-wrap:wrap;gap:10px;margin-top:14px;
+  }
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{
+    font-family:inherit;cursor:pointer;border:none;
+    background:#241f1a;color:var(--dim);
+    font-size:11px;letter-spacing:1px;padding:7px 13px;
+    transition:background .15s,color .15s;
+  }
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent);color:#171310;font-weight:700}
+
+  .time{
+    font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim);
+    margin-top:16px;text-align:center;letter-spacing:1.5px;
+  }
+  .status{
+    margin-top:8px;font-size:12.5px;color:var(--dim);text-align:center;
+    min-height:19px;line-height:1.5;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .status.ok{color:var(--ok)}
+  .status.err{color:var(--err)}
+  .hint{
+    margin-top:10px;font-size:11.5px;color:var(--dim);opacity:.8;
+    text-align:center;line-height:1.8;
+  }
+  .hint b{color:var(--accent);font-weight:600}
+
+  /* ── 底栏 ── */
+  footer{
+    margin-top:20px;font-size:11px;color:var(--dim);opacity:.75;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;
+    line-height:2;
+  }
+  kbd{
+    background:#241f1a;border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;padding:1px 7px;font-size:10px;font-family:inherit;
+    color:var(--text);letter-spacing:.5px;
+  }
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+  @media (max-width:600px){
+    body{padding:14px 8px 22px}
+    .top{margin-bottom:12px}
+    .tagline{display:none}
+    .deck{padding:12px 14px 18px;border-radius:18px}
+    .deck-body{gap:10px}
+    .pitch{width:46px}
+    .controls{gap:9px}
+    .btn,.file-label{padding:10px 13px;font-size:12.5px}
+    #playBtn{width:56px;height:56px;font-size:19px}
+    footer{gap:8px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .drop-tip{animation:none;opacity:.6}
+    .tonearm{transition-duration:.15s}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo">
+    <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="30" fill="#111"/>
+      <circle cx="32" cy="32" r="19" fill="none" stroke="#2a2a2a" stroke-width="1"/>
+      <circle cx="32" cy="32" r="13" fill="none" stroke="#222" stroke-width="1"/>
+      <circle cx="32" cy="32" r="11" fill="#e0a83f"/>
+      <circle cx="32" cy="32" r="3" fill="#141210"/>
+    </svg>
+    <span>VINYL<b>&nbsp;DJ</b></span>
+  </div>
+  <div class="tagline">浏览器里的黑胶搓碟唱机</div>
+  <a class="gh" href="https://github.com/slatinwine/vinyl-dj" target="_blank" rel="noopener">GitHub</a>
+</header>
+
+<main class="deck" id="deck">
+  <span class="screw tl"></span><span class="screw tr"></span>
+  <span class="screw bl"></span><span class="screw br"></span>
+
+  <div class="deck-head">
+    <div class="brand">VDJ&#8209;33 MKⅡ<small>DIRECT DRIVE TURNTABLE · SCRATCH</small></div>
+    <button class="led-btn" id="powerBtn" title="电机电源">POWER <i class="led"></i></button>
+  </div>
+
+  <div class="deck-body">
+    <div class="platter-wrap">
+      <div class="platter">
+        <div class="disc empty" id="disc">
+          <div class="spin" id="spin">
+            <div class="smudge"></div>
+            <div class="dots"></div>
+            <div class="label">
+              <div class="ring"></div>
+              <div class="ring r2"></div>
+              <div class="name" id="trackName">VINYL DJ</div>
+              <div class="sub" id="trackSub">DROP A RECORD</div>
+            </div>
+            <div class="hole"></div>
+          </div>
+          <div class="sheen"></div>
+          <div class="drop-tip" id="dropTip">拖入 / 选择音频文件</div>
+        </div>
+        <div class="tonearm" id="tonearm">
+          <div class="cw"></div>
+          <div class="base"></div>
+          <div class="arm"></div>
+          <div class="head"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="pitch" title="音调 ±10%（双击归零）">
+      <div class="pitch-label">PITCH</div>
+      <div class="track-wrap">
+        <input type="range" class="vertical" id="pitch" min="-10" max="10" step="0.1" value="0" aria-label="音调微调">
+      </div>
+      <div class="pitch-val" id="pitchVal">+0.0%</div>
+    </aside>
+  </div>
+
+  <div class="seek" id="seek" role="slider" aria-label="播放进度（可点击/拖动跳转）">
+    <div class="seek-fill" id="seekFill"><i class="seek-dot"></i></div>
+  </div>
+
+  <div class="controls">
+    <label class="file-label">🎵 选择音乐<input type="file" id="fileInput" accept="audio/*"></label>
+    <button class="btn" id="demoBtn">🎧 试听 Demo</button>
+    <button id="playBtn" disabled title="播放 / 暂停（空格）" aria-label="播放或暂停">▶</button>
+    <div class="vol">VOL <input type="range" class="horizontal" id="volume" min="0" max="1" step="0.01" value="0.85" aria-label="音量"></div>
+  </div>
+
+  <div class="switches">
+    <div class="seg" id="rpmSeg" role="group" aria-label="转速">
+      <button data-rpm="33.3333" class="on">33⅓</button><button data-rpm="45">45 RPM</button>
+    </div>
+    <button class="led-btn" id="crackleBtn" title="黑胶底噪 / 爆音">CRACKLE <i class="led"></i></button>
+  </div>
+
+  <div class="time" id="time">00:00 / 00:00</div>
+  <div class="status" id="status">正在初始化…</div>
+  <div class="hint">
+    <b>按住唱片拖动</b>即可搓碟 —— 顺时针加速、逆时针倒放<br>
+    松手自动恢复播放 · 唱针落下时还有黑胶底噪
+  </div>
+</main>
+
+<footer>
+  <span><kbd>Space</kbd> 播放 / 暂停</span>
+  <span><kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 5 秒</span>
+  <span><kbd>双击 PITCH</kbd> 归零</span>
+  <span>音频仅在本地处理，不会上传</span>
+</footer>
+
+<noscript>需要启用 JavaScript 才能使用 Vinyl DJ。</noscript>
+
+<script>
+(() => {
+'use strict';
+
+/* ════════════════════════════════════════════════════════════
+   音频引擎：AudioWorklet（通过 Blob 内联，保持单文件部署）
+   —— 按任意速率（含负值）读取缓冲区，Catmull-Rom 插值，
+      搓碟时以「手的位置」为基准做软锁相（时间码原理）
+   ════════════════════════════════════════════════════════════ */
+const WORKLET_SRC = [
+'class ScratchProcessor extends AudioWorkletProcessor {',
+'  constructor() {',
+'    super();',
+'    this.ch = null;',
+'    this.dur = 0; this.sr = 44100;',
+'    this.pos = 0; this.rate = 0; this.target = 0;',
+'    this.lockPos = null; this.lockRate = 0;',
+'    this.uiCount = 0;',
+'    this.port.onmessage = (e) => {',
+'      const m = e.data;',
+'      if (m.t === "load") {',
+'        this.ch = m.ch.map(function(b){ return new Float32Array(b); });',
+'        this.dur = m.dur; this.sr = m.sr;',
+'        this.pos = 0; this.rate = 0; this.target = 0;',
+'        this.lockPos = null; this.lockRate = 0;',
+'      } else if (m.t === "rate") { this.target = m.v; }',
+'      else if (m.t === "scratch") { if (!m.on) this.lockPos = null; }',
+'      else if (m.t === "tick") { this.lockPos = m.pos; this.lockRate = m.v; }',
+'      else if (m.t === "seek") {',
+'        if (this.dur > 0) this.pos = Math.min(Math.max(m.pos, 0), this.dur - 1e-4);',
+'      }',
+'    };',
+'  }',
+'  process(inputs, outputs) {',
+'    const out = outputs[0];',
+'    const L = out[0], R = out.length > 1 ? out[1] : out[0];',
+'    const n = L.length;',
+'    if (!this.ch) { L.fill(0); if (R !== L) R.fill(0); return true; }',
+'    const a = this.ch[0], b = this.ch.length > 1 ? this.ch[1] : this.ch[0];',
+'    const N = a.length, bsr = this.sr, osr = sampleRate;',
+'    const kMotor = 1 - Math.exp(-1 / (0.20 * osr));',
+'    const kHand  = 1 - Math.exp(-1 / (0.012 * osr));',
+'    const kLock  = 1 - Math.exp(-1 / (0.008 * osr));',
+'    const self = this;',
+'    for (let i = 0; i < n; i++) {',
+'      if (self.lockPos !== null) {',
+'        self.rate += (self.lockRate - self.rate) * kHand;',
+'        self.lockPos += self.lockRate / osr;',
+'        self.pos += self.rate / osr;',
+'        self.pos += (self.lockPos - self.pos) * kLock;',
+'      } else {',
+'        self.rate += (self.target - self.rate) * kMotor;',
+'        self.pos += self.rate / osr;',
+'      }',
+'      if (self.pos < 0) { self.pos = 0; if (self.rate < 0) self.rate = 0; }',
+'      if (self.pos >= self.dur) {',
+'        self.pos = self.dur - 1e-4;',
+'        if (self.rate > 0) self.rate = 0;',
+'        if (self.target > 0) { self.target = 0; self.port.postMessage({ t: "ended" }); }',
+'      }',
+'      const f = self.pos * bsr;',
+'      let i0 = f | 0;',
+'      if (i0 < 1) i0 = 1; if (i0 > N - 2) i0 = N - 2;',
+'      const t = f - i0;',
+'      const im = i0 - 1, i1 = i0 + 1, i2 = i0 + 2 < N ? i0 + 2 : N - 1;',
+'      const p0 = a[im], p1 = a[i0], p2 = a[i1], p3 = a[i2];',
+'      L[i] = p1 + 0.5 * t * (p2 - p0 + t * (2*p0 - 5*p1 + 4*p2 - p3 + t * (3*(p1-p2) + p3 - p0)));',
+'      if (R !== L) {',
+'        const q0 = b[im], q1 = b[i0], q2 = b[i1], q3 = b[i2];',
+'        R[i] = q1 + 0.5 * t * (q2 - q0 + t * (2*q0 - 5*q1 + 4*q2 - q3 + t * (3*(q1-q2) + q3 - q0)));',
+'      }',
+'    }',
+'    if (++this.uiCount >= 3) {',
+'      this.uiCount = 0;',
+'      this.port.postMessage({ t: "ui", pos: this.pos, rate: this.rate });',
+'    }',
+'    return true;',
+'  }',
+'}',
+'registerProcessor("scratch-processor", ScratchProcessor);'
+].join('\n');
+
+/* ── DOM ── */
+const $ = id => document.getElementById(id);
+const disc=$('disc'), spin=$('spin'), playBtn=$('playBtn'), tonearm=$('tonearm'),
+      timeEl=$('time'), volEl=$('volume'), statusEl=$('status'),
+      trackName=$('trackName'), trackSub=$('trackSub'), dropTip=$('dropTip'),
+      seekEl=$('seek'), seekFill=$('seekFill'),
+      pitchEl=$('pitch'), pitchVal=$('pitchVal'), demoBtn=$('demoBtn'),
+      powerBtn=$('powerBtn'), crackleBtn=$('crackleBtn'), rpmSeg=$('rpmSeg'),
+      fileInput=$('fileInput');
+
+/* ── 偏好设置 ── */
+const PREFS_KEY='vinyldj.prefs';
+const prefs={vol:0.85,pitch:0,rpm:100/3,crackle:true,power:true};
+try{Object.assign(prefs,JSON.parse(localStorage.getItem(PREFS_KEY)||'{}'));}catch(e){}
+const savePrefs=()=>{try{localStorage.setItem(PREFS_KEY,JSON.stringify(prefs));}catch(e){}};
+
+/* ── 状态 ── */
+const RPM33=100/3;
+let ctx=null, gain=null, node=null, crackleGain=null;
+let duration=0;
+let posUI=0, rateUI=0;
+let playing=false, loading=false, hasTrack=false;
+let power=prefs.power!==false;
+let rpm=+prefs.rpm||RPM33;
+let pitch=+prefs.pitch||0;
+let crackleOn=prefs.crackle!==false;
+let scratching=false;
+
+const baseRate=()=>(rpm/RPM33)*(1+pitch/100);
+const fmtTime=s=>{s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
+const setStatus=(msg,cls)=>{statusEl.textContent=msg;statusEl.className='status'+(cls?' '+cls:'');};
+
+window.addEventListener('error',e=>{if(e.message)setStatus('脚本错误：'+e.message,'err');});
+window.addEventListener('unhandledrejection',e=>{const r=e.reason;setStatus('错误：'+((r&&r.message)||r),'err');});
+
+/* ── 引擎初始化 ── */
+async function initAudio(){
+  if(ctx)return true;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC){setStatus('当前浏览器不支持 Web Audio','err');return false;}
+  ctx=new AC();
+  if(!ctx.audioWorklet){
+    setStatus('当前浏览器不支持 AudioWorklet，请使用新版 Chrome / Edge / Firefox / Safari','err');
+    return false;
+  }
+  const url=URL.createObjectURL(new Blob([WORKLET_SRC],{type:'application/javascript'}));
+  await ctx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+  gain=ctx.createGain();
+  gain.gain.value=prefs.vol;
+  node=new AudioWorkletNode(ctx,'scratch-processor',{numberOfInputs:0,outputChannelCount:[2]});
+  node.port.onmessage=e=>{
+    const m=e.data;
+    if(m.t==='ui'){posUI=m.pos;rateUI=m.rate;updateProgressUI();}
+    else if(m.t==='ended'){playing=false;updatePlayBtn();updateProgressUI();}
+  };
+  node.connect(gain);gain.connect(ctx.destination);
+  initCrackle();
+  return true;
+}
+
+/* ── 黑胶爆音层（唱针接触且有转速时轻轻响起）── */
+function initCrackle(){
+  const sr=ctx.sampleRate,len=sr*6|0;
+  const buf=ctx.createBuffer(2,len,sr);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.012; // 底噪
+    let i=0; // 稀疏爆点
+    while(i<len){
+      i+=180+(Math.random()*8200|0);
+      if(i>=len)break;
+      const amp=(0.08+Math.random()*0.42)*(Math.random()<0.12?1:0.4);
+      const decay=1/(0.0009*sr*(1+Math.random()*4));
+      const end=Math.min(i+1800,len);
+      for(let j=i;j<end;j++)d[j]+=(Math.random()*2-1)*amp*Math.exp(-(j-i)*decay);
+    }
+  }
+  const src=ctx.createBufferSource();
+  src.buffer=buf;src.loop=true;
+  const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=1400;
+  crackleGain=ctx.createGain();crackleGain.gain.value=0;
+  src.connect(hp);hp.connect(crackleGain);crackleGain.connect(gain);
+  src.start();
+}
+
+/* ── 载入音频 ── */
+async function pushBuffer(buf,title){
+  const chs=[];
+  for(let c=0;c<buf.numberOfChannels;c++)chs.push(buf.getChannelData(c).slice().buffer);
+  node.port.postMessage({t:'load',ch:chs,dur:buf.duration,sr:buf.sampleRate},chs);
+  duration=buf.duration;hasTrack=true;playing=false;posUI=0;rateUI=0;
+  disc.classList.remove('empty');dropTip.style.display='none';
+  trackName.textContent=title;trackName.title=title;
+  trackSub.textContent=(rpm===45?'45':'33⅓')+' RPM · '+fmtTime(buf.duration);
+  playBtn.disabled=!power;
+  updatePlayBtn();updateProgressUI();
+  setMediaSession(title,buf.duration);
+}
+
+async function loadFile(file){
+  if(!file||loading)return;
+  if(!/^audio\//.test(file.type)&&!/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|webm|weba|mp4)$/i.test(file.name)){
+    setStatus('这不是音频文件，请选择 MP3 / WAV / OGG / M4A 等格式','err');return;
+  }
+  loading=true;demoBtn.disabled=true;
+  try{
+    setStatus('正在解码「'+file.name+'」…');
+    if(!await initAudio())throw new Error('音频引擎不可用');
+    await ctx.resume();
+    const arr=await file.arrayBuffer();
+    const buf=await ctx.decodeAudioData(arr);
+    const title=(file.name.replace(/\.[^.]+$/,'')||'UNTITLED').slice(0,36);
+    await pushBuffer(buf,title);
+    setStatus('已载入「'+title+'」· '+fmtTime(buf.duration)+' · 点 ▶ 或按空格播放','ok');
+  }catch(err){
+    setStatus('载入失败：'+((err&&err.message)||err)+'（试试 MP3 / WAV 格式）','err');
+  }finally{
+    loading=false;demoBtn.disabled=false;fileInput.value='';
+  }
+}
+
+/* ── Demo 节拍：OfflineAudioContext 合成一段 Lo-Fi 循环 ── */
+async function loadDemo(){
+  if(loading)return;
+  loading=true;demoBtn.disabled=true;
+  try{
+    setStatus('正在合成 Demo 节拍…');
+    if(!await initAudio())throw new Error('音频引擎不可用');
+    await ctx.resume();
+    const bpm=88,beat=60/bpm,bars=8;
+    const off=new OfflineAudioContext(2,Math.ceil(bars*4*beat*ctx.sampleRate),ctx.sampleRate);
+    buildBeat(off,bpm,bars);
+    const buf=await off.startRendering();
+    await pushBuffer(buf,'MIDNIGHT LOOP');
+    setStatus('Demo 已就绪 · '+fmtTime(buf.duration)+' · 点 ▶ 或按空格播放','ok');
+  }catch(err){
+    setStatus('Demo 生成失败：'+((err&&err.message)||err),'err');
+  }finally{loading=false;demoBtn.disabled=false;}
+}
+
+function buildBeat(off,bpm,bars){
+  const beat=60/bpm,bar=beat*4,sr=off.sampleRate;
+  const master=off.createGain();master.gain.value=0.9;
+  const comp=off.createDynamicsCompressor();
+  comp.threshold.value=-16;comp.ratio.value=4;comp.attack.value=0.004;comp.release.value=0.18;
+  master.connect(comp);comp.connect(off.destination);
+
+  const nbuf=off.createBuffer(1,sr,sr);
+  const nd=nbuf.getChannelData(0);
+  for(let i=0;i<sr;i++)nd[i]=Math.random()*2-1;
+
+  const noise=(t,type,freq,q,dur,amp)=>{
+    const s=off.createBufferSource();s.buffer=nbuf;
+    const f=off.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;
+    const g=off.createGain();
+    g.gain.setValueAtTime(amp,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    s.connect(f);f.connect(g);g.connect(master);
+    s.start(t,Math.random()*0.4);s.stop(t+dur+0.02);
+  };
+  const kick=(t,amp)=>{
+    const o=off.createOscillator(),g=off.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(150,t);
+    o.frequency.exponentialRampToValueAtTime(42,t+0.12);
+    g.gain.setValueAtTime(amp,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.3);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+0.32);
+  };
+  const snare=t=>{
+    noise(t,'bandpass',1800,0.8,0.18,0.5);
+    const o=off.createOscillator(),g=off.createGain();
+    o.type='triangle';o.frequency.value=190;
+    g.gain.setValueAtTime(0.25,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.08);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+0.1);
+  };
+  const hat=(t,open)=>noise(t,'highpass',8200,0.7,open?0.18:0.045,open?0.2:0.13);
+  const bass=(t,f,d)=>{
+    const o=off.createOscillator(),g=off.createGain();
+    const o2=off.createOscillator(),g2=off.createGain();
+    o.type='sine';o.frequency.value=f;
+    o2.type='square';o2.frequency.value=f;g2.gain.value=0.05;
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.4,t+0.02);
+    g.gain.setValueAtTime(0.4,Math.max(t+0.02,t+d-0.08));
+    g.gain.exponentialRampToValueAtTime(0.001,t+d);
+    o.connect(g);o2.connect(g2);g2.connect(g);g.connect(master);
+    o.start(t);o.stop(t+d+0.02);o2.start(t);o2.stop(t+d+0.02);
+  };
+  const chord=(t,fs,d)=>{
+    fs.forEach((f,idx)=>{
+      const o=off.createOscillator(),g=off.createGain(),lp=off.createBiquadFilter();
+      o.type=idx%2?'triangle':'sine';
+      o.frequency.value=f*(1+(idx-1.5)*0.0012);
+      lp.type='lowpass';lp.frequency.value=1500;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(0.095,t+0.07);
+      g.gain.setValueAtTime(0.095,t+d*0.55);
+      g.gain.linearRampToValueAtTime(0.0001,t+d);
+      o.connect(lp);lp.connect(g);g.connect(master);
+      o.start(t);o.stop(t+d+0.02);
+    });
+  };
+
+  const N=n=>440*Math.pow(2,(n-69)/12);
+  const roots=[41,37,44,39];                                   // F2 Db2 Ab2 Eb2
+  const chords=[[53,56,60,63],[49,53,56,60],[56,60,63],[51,55,58,63]];
+  for(let b=0;b<bars;b++){
+    const t0=b*bar;
+    kick(t0,0.9);kick(t0+2*beat,0.85);
+    if(b%2===1)kick(t0+3.75*beat,0.5);
+    snare(t0+beat);snare(t0+3*beat);
+    if(b===bars-1)snare(t0+3.5*beat);
+    for(let i=0;i<8;i++){
+      const t=t0+i*beat/2+(i%2?0.09*beat:0);                  // swing
+      hat(t,i===7&&b%2===1);
+    }
+    bass(t0,N(roots[b%4]),beat*1.4);
+    bass(t0+2.5*beat,N(roots[b%4]),beat*0.9);
+    chord(t0+0.5*beat,chords[b%4].map(N),bar*0.85);
+  }
+}
+
+/* ── UI 刷新 ── */
+function updatePlayBtn(){
+  playBtn.textContent=playing?'❚❚':'▶';
+  playBtn.classList.toggle('on',playing);
+  playBtn.setAttribute('aria-label',playing?'暂停':'播放');
+}
+function updateProgressUI(){
+  if(duration>0){
+    timeEl.textContent=fmtTime(posUI)+' / '+fmtTime(duration);
+    seekFill.style.width=Math.min(posUI/duration*100,100)+'%';
+  }
+  const p=duration>0?Math.min(Math.max(posUI/duration,0),1):0;
+  tonearm.style.transform='rotate('+(hasTrack?9+p*20:6)+'deg)';
+  if(crackleGain&&ctx){
+    const on=(crackleOn&&hasTrack&&(playing||scratching)&&Math.abs(rateUI)>0.02)?0.5:0;
+    crackleGain.gain.setTargetAtTime(on,ctx.currentTime,0.08);
+  }
+}
+
+/* ── 播放控制 ── */
+playBtn.addEventListener('click',async()=>{
+  if(!hasTrack||!node||loading)return;
+  if(!power){power=true;applyPower();}
+  await ctx.resume();
+  if(playing){
+    playing=false;
+    node.port.postMessage({t:'rate',v:0});
+  }else{
+    if(duration-posUI<0.05)node.port.postMessage({t:'seek',pos:0});
+    playing=true;
+    node.port.postMessage({t:'rate',v:baseRate()});
+  }
+  updatePlayBtn();
+});
+
+/* ── 电源 / 转速 / 爆音 ── */
+function applyPower(){
+  powerBtn.classList.toggle('on',power);
+  playBtn.disabled=!power||!hasTrack;
+  if(!power&&playing){playing=false;updatePlayBtn();}
+  if(node)node.port.postMessage({t:'rate',v:playing?baseRate():0});
+  prefs.power=power;savePrefs();
+}
+powerBtn.addEventListener('click',()=>{
+  power=!power;applyPower();
+  setStatus(power?'电机已通电 · 转盘待命':'电机已断电，转盘滑行停止',power?'ok':undefined);
+});
+
+rpmSeg.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  rpm=parseFloat(b.dataset.rpm);
+  [...rpmSeg.children].forEach(x=>x.classList.toggle('on',x===b));
+  if(playing)node.port.postMessage({t:'rate',v:baseRate()});
+  if(hasTrack)trackSub.textContent=(rpm===45?'45':'33⅓')+' RPM · '+fmtTime(duration);
+  prefs.rpm=rpm;savePrefs();
+});
+
+crackleBtn.addEventListener('click',()=>{
+  crackleOn=!crackleOn;
+  crackleBtn.classList.toggle('on',crackleOn);
+  prefs.crackle=crackleOn;savePrefs();
+});
+
+/* ── 音调 / 音量 ── */
+pitchEl.addEventListener('input',()=>{
+  pitch=parseFloat(pitchEl.value);
+  pitchVal.textContent=(pitch>=0?'+':'')+pitch.toFixed(1)+'%';
+  if(playing&&node)node.port.postMessage({t:'rate',v:baseRate()});
+  prefs.pitch=pitch;savePrefs();
+});
+pitchEl.addEventListener('dblclick',()=>{
+  pitchEl.value=0;pitchEl.dispatchEvent(new Event('input'));
+});
+volEl.addEventListener('input',()=>{
+  if(gain)gain.gain.setTargetAtTime(parseFloat(volEl.value),ctx.currentTime,0.02);
+  prefs.vol=parseFloat(volEl.value);savePrefs();
+});
+
+/* ── 进度条拖动 ── */
+let seeking=false;
+const seekFrac=e=>{
+  const r=seekEl.getBoundingClientRect();
+  return Math.min(Math.max((e.clientX-r.left)/r.width,0),1);
+};
+const applySeek=e=>{
+  const f=seekFrac(e);
+  node.port.postMessage({t:'seek',pos:f*duration});
+  posUI=f*duration;updateProgressUI();
+};
+seekEl.addEventListener('pointerdown',e=>{
+  if(!hasTrack||!node||scratching)return;
+  seeking=true;
+  try{seekEl.setPointerCapture(e.pointerId);}catch(_){}
+  applySeek(e);
+});
+seekEl.addEventListener('pointermove',e=>{if(seeking)applySeek(e);});
+seekEl.addEventListener('pointerup',()=>seeking=false);
+seekEl.addEventListener('pointercancel',()=>seeking=false);
+
+/* ── 搓碟：手的位置 = 唱片角度（时间码原理，一圈 = 60/RPM 秒音频）── */
+let handPos=0,lastA=0,lastT=0,scratchVel=0;
+const MAX_RATE=12;
+const angleOf=e=>{
+  const r=disc.getBoundingClientRect();
+  return Math.atan2(e.clientY-(r.top+r.height/2),e.clientX-(r.left+r.width/2))*180/Math.PI;
+};
+disc.addEventListener('pointerdown',async e=>{
+  if(!hasTrack||!node)return;
+  e.preventDefault();
+  await ctx.resume();
+  scratching=true;scratchVel=0;
+  handPos=Math.min(Math.max(posUI,0),duration);
+  lastA=angleOf(e);lastT=performance.now();
+  node.port.postMessage({t:'scratch',on:true});
+  node.port.postMessage({t:'tick',pos:handPos,v:0});
+  try{disc.setPointerCapture(e.pointerId);}catch(_){}
+  disc.classList.add('dragging');
+});
+  disc.addEventListener('pointermove',e=>{
+    if(!scratching)return;
+    const a=angleOf(e);
+    let dA=a-lastA;
+    if(dA>180)dA-=360;if(dA<-180)dA+=360;
+    lastA=a;
+    const now=performance.now(),dt=(now-lastT)/1000;
+    if(dt>0)scratchVel=scratchVel*0.6+(dA/dt)*0.4;
+    lastT=now;
+    handPos+=dA/360*(60/rpm);
+    if(handPos<0)handPos=0;
+    if(handPos>duration)handPos=duration;
+    scratchTick();
+  });
+/* 搓碟 tick：音频关键路径不依赖 rAF（后台/失焦时 rAF 会被节流）。
+   pointermove 直接发送；40ms 定时器兜底处理手停住后的速度衰减 */
+function scratchTick(){
+  if(!scratching)return;
+  const now=performance.now();
+  if(now-lastT>90)scratchVel*=0.7;
+  const v=Math.max(-MAX_RATE,Math.min(MAX_RATE,scratchVel/200));
+  node&&node.port.postMessage({t:'tick',pos:handPos,v});
+}
+setInterval(scratchTick,40);
+
+const endScratch=()=>{
+  if(!scratching)return;
+  scratching=false;
+  disc.classList.remove('dragging');
+  node.port.postMessage({t:'scratch',on:false});
+  node.port.postMessage({t:'rate',v:playing?baseRate():0});
+};
+disc.addEventListener('pointerup',endScratch);
+disc.addEventListener('pointercancel',endScratch);
+disc.addEventListener('lostpointercapture',endScratch);
+disc.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ── 渲染循环（仅视觉：唱片旋转）── */
+let rot=0,prev=performance.now();
+function frame(now){
+  const dt=Math.min((now-prev)/1000,0.05);
+  prev=now;
+  rot=(rot+rateUI*200*dt)%360;
+  spin.style.transform='rotate('+rot+'deg)';
+  requestAnimationFrame(frame);
+}
+
+/* ── 文件入口 ── */
+fileInput.addEventListener('change',e=>loadFile(e.target.files[0]));
+demoBtn.addEventListener('click',loadDemo);
+
+let dragDepth=0;
+window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.body.classList.add('dropping');});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;document.body.classList.remove('dropping');}});
+window.addEventListener('drop',e=>{
+  e.preventDefault();dragDepth=0;document.body.classList.remove('dropping');
+  const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f)loadFile(f);
+});
+
+/* ── 键盘 ── */
+window.addEventListener('keydown',e=>{
+  const tag=e.target&&e.target.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='BUTTON')return;
+  if(e.code==='Space'){
+    e.preventDefault();
+    if(!playBtn.disabled)playBtn.click();
+  }else if(e.code==='ArrowLeft'||e.code==='ArrowRight'){
+    if(!hasTrack||!node)return;
+    e.preventDefault();
+    const d=(e.code==='ArrowLeft'?-5:5);
+    node.port.postMessage({t:'seek',pos:Math.min(Math.max(posUI+d,0),Math.max(duration-0.05,0))});
+  }
+});
+
+/* ── 媒体会话（系统播放控件）── */
+let artworkCache=null;
+function makeArtwork(){
+  if(artworkCache)return artworkCache;
+  try{
+    const c=document.createElement('canvas');c.width=c.height=512;
+    const g=c.getContext('2d');
+    g.fillStyle='#141210';g.fillRect(0,0,512,512);
+    const grd=g.createRadialGradient(256,256,10,256,256,238);
+    grd.addColorStop(0,'#0d0d0d');grd.addColorStop(1,'#1e1e1e');
+    g.fillStyle=grd;g.beginPath();g.arc(256,256,238,0,7);g.fill();
+    for(let r=96;r<230;r+=5){
+      g.strokeStyle='rgba(255,255,255,'+(0.02+Math.random()*0.03).toFixed(3)+')';
+      g.beginPath();g.arc(256,256,r,0,7);g.stroke();
+    }
+    const lg=g.createRadialGradient(256,224,10,256,256,80);
+    lg.addColorStop(0,'#f2c56a');lg.addColorStop(1,'#a5762a');
+    g.fillStyle=lg;g.beginPath();g.arc(256,256,78,0,7);g.fill();
+    g.fillStyle='#241a06';g.textAlign='center';
+    g.font='bold 27px sans-serif';g.fillText('VINYL DJ',256,250);
+    g.font='14px sans-serif';g.fillText('33 1/3 RPM',256,278);
+    g.fillStyle='#141210';g.beginPath();g.arc(256,256,7,0,7);g.fill();
+    artworkCache=c.toDataURL('image/png');
+  }catch(e){}
+  return artworkCache;
+}
+function setMediaSession(title,dur){
+  if(!('mediaSession' in navigator))return;
+  try{
+    const art=makeArtwork();
+    navigator.mediaSession.metadata=new MediaMetadata({
+      title,artist:'Vinyl DJ',album:'黑胶搓碟唱机',
+      artwork:art?[{src:art,sizes:'512x512',type:'image/png'}]:[]
+    });
+    navigator.mediaSession.setActionHandler('play',()=>{if(!playBtn.disabled)playBtn.click();});
+    navigator.mediaSession.setActionHandler('pause',()=>{if(playing)playBtn.click();});
+    navigator.mediaSession.setActionHandler('seekto',d=>{
+      if(node&&d.seekTime!=null)node.port.postMessage({t:'seek',pos:Math.min(Math.max(d.seekTime,0),duration)});
+    });
+  }catch(e){}
+}
+
+/* ── 初始化 ── */
+volEl.value=prefs.vol;
+pitchEl.value=pitch;
+pitchVal.textContent=(pitch>=0?'+':'')+pitch.toFixed(1)+'%';
+[...rpmSeg.children].forEach(b=>b.classList.toggle('on',Math.abs(parseFloat(b.dataset.rpm)-rpm)<0.1));
+crackleBtn.classList.toggle('on',crackleOn);
+applyPower();
+setStatus('拖入或选择一个音频文件开始 · 没有素材就先点「试听 Demo」');
+updateProgressUI();
+requestAnimationFrame(frame);
+
+/* 调试钩子（只读）*/
+Object.defineProperty(window,'__vinyl',{get:()=>({
+  hasTrack,playing,scratching,power,rpm,pitch,crackleOn,duration,
+  posUI:+posUI.toFixed(3),rateUI:+rateUI.toFixed(3),engine:!!node,
+  handPos:scratching?+handPos.toFixed(3):null
+})});
+})();
+</script>
+</body>
+</html>
