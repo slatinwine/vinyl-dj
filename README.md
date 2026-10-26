@@ -50,3 +50,13 @@ Chrome / Edge 121+、Firefox、Safari 14.1+（需要 AudioWorklet 与 `writing-m
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## 关注
+
+| 公众号 | 小红书 · 酒里加盐 |
+| :---: | :---: |
+| ![公众号二维码](qrcode.jpg) | ![小红书二维码](xhs-qr.jpg) |
+
+小红书号 `6100441379` · 酒馆会往酒里加盐，让顾客越喝越渴
